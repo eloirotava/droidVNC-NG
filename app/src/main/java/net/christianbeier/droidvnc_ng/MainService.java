@@ -139,6 +139,13 @@ public class MainService extends Service {
     private final List<Long> mConnectedClients = new ArrayList<>() ;
     private final ReentrantReadWriteLock mConnectedClientsLock = new ReentrantReadWriteLock();
 
+    // Dormant mode timer
+    private final Handler mDormantModeHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mDormantModeRunnable = () -> {
+        Log.d(TAG, "Dormant mode triggered: no clients connected for 60 seconds.");
+        MediaProjectionService.pauseScreenCapture();
+    };
+
     private static class OutboundClientReconnectData {
         Intent intent;
         long client;
@@ -773,6 +780,10 @@ public class MainService extends Service {
         Log.d(TAG, "onClientConnected: client " + client);
 
         try {
+            // Cancel dormant mode timer and resume capture if we were dormant
+            instance.mDormantModeHandler.removeCallbacks(instance.mDormantModeRunnable);
+            MediaProjectionService.resumeScreenCapture();
+
             instance.mWakeLock.acquire();
             Utils.withLock(instance.mConnectedClientsLock.writeLock(), () -> instance.mConnectedClients.add(client));
             instance.updateNotification(false);
@@ -805,6 +816,13 @@ public class MainService extends Service {
 
             instance.mWakeLock.release();
             Utils.withLock(instance.mConnectedClientsLock.writeLock(), () -> instance.mConnectedClients.remove(client));
+            
+            // Check if no clients are left to trigger dormant mode timer
+            if (instance.mConnectedClients.isEmpty()) {
+                Log.d(TAG, "onClientDisconnected: No clients left, starting 60s dormant timer.");
+                instance.mDormantModeHandler.postDelayed(instance.mDormantModeRunnable, 60000);
+            }
+
             if(!instance.mIsStopping) {
                 // don't show notifications when clients are disconnected on orderly server shutdown
                 instance.updateNotification(false);

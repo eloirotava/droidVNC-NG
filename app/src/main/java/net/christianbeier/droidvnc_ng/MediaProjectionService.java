@@ -352,6 +352,26 @@ public class MediaProjectionService extends Service {
         }
     }
 
+    static void pauseScreenCapture() {
+        if (instance != null) {
+            Log.d(TAG, "pauseScreenCapture: Pausing screen capture (dormant mode)");
+            if (instance.mVirtualDisplay != null) {
+                instance.mVirtualDisplay.setSurface(null);
+            }
+            if (instance.mImageReader != null) {
+                instance.mImageReader.close();
+                instance.mImageReader = null;
+            }
+        }
+    }
+
+    static void resumeScreenCapture() {
+        if (instance != null && instance.mMediaProjection != null) {
+            Log.d(TAG, "resumeScreenCapture: Resuming screen capture from dormant mode");
+            instance.startScreenCapture();
+        }
+    }
+
     private void postResult(boolean isMediaProjectionEnabled) {
         Intent intent = new Intent(this, MainService.class);
         intent.setAction(MainService.ACTION_HANDLE_MEDIA_PROJECTION_RESULT);
